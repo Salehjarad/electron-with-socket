@@ -9,14 +9,15 @@ const socket = require('socket.io-client')
 const spawn = require('child_process').spawn;
 const axios = require('axios').default;
 
-const localStorge = require('./helpers/storage');
+const Storge = require('./helpers/storage');
+const localStorge = new Storge();
 
 const token = localStorge.getItem('token')
 
 const io = socket.connect('http://localhost:8090', {
   transports: ['websocket', 'polling'],
   query: {
-    token: token !== undefined ? token : ''
+    token: token
   }
 })
 
@@ -32,6 +33,7 @@ const macIcon = path.resolve(__dirname, 'icon.png');
 // be closed automatically when the JavaScript object is garbage collected.
 let mainWindow
 let iconApp
+let userId
 
 function createWindow () {
   // Create the browser window.
@@ -57,6 +59,7 @@ function createWindow () {
     // Dereference the window object, usually you would store windows
     // in an array if your app supports multi windows, this is the time
     // when you should delete the corresponding element.
+    io.emit('device-status', localStorge.getItem('id'), false);
     mainWindow = null
   })
 }
@@ -102,28 +105,44 @@ app.on('activate', function () {
 const data = {
   deviceName: os.userInfo().username,
   deviceType: os.platform() === 'darwin' ? 'Mac OS' : os.platform() === 'win32' ? 'Windows' : 'n/a',
+  connected: io.connected ? true : false
+}
+
+let userData;
+
+
+if(io.connected) {
+  io.emit('sign-device-id', localStorge.setItem('id'), data);
 }
 
 
-let userData = {};
-
 ipc.on('load', (event) => {
-  console.log('load')
 
-  axios({
-    method: 'get',
-    url: 'http://localhost:8090/users/user',
-    headers: {'auth': token}
-  }).then((res) => {
-    console.log(res.data.username)
-    userData = res.data;
-  }).catch((e) => {
-    console.log(e);
-  })
+  // axios({
+  //   method: 'get',
+  //   url: 'http://localhost:8090/users/user',
+  //   headers: {'auth': token}
+  // }).then((res) => {
+  //   localStorge.setItem('id', res.data.id)
+  //   userData = res.data;
+  // }).catch((e) => {
+  //   console.log(e);
+  // })
 })
 
 
-spawn('open', ['~/Downloads/'])
+const loadD = () => {
+  axios({
+    method: 'get',
+    url: 'http://localhost:8090/users/user',
+    headers: {'auth': localStorge.getItem('token')}
+  }).then((res) => {
+    userData = res.data;
+    localStorge.setItem('id', res.data.id)
+  }).catch((e) => {
+    console.log(e);
+  })
+}
 
 
 ipc.on('login', event => {
@@ -137,22 +156,22 @@ ipc.on('login', event => {
       password: 'pass'
     }
   }).then((res) => {
-    localStorge.setItem(res.data.token)
+    localStorge.setMulti({token: res.data.token, id: ''});
   }).catch((e) => {
     console.log(e);
+  }).finally(() => {
+    loadD();
   })
 })
 
 ipc.on('test', event => {
-  console.log('test')
-
-  console.log(io.id)
-  io.emit('sign-device-id', userData.id, data);
+  io.emit('sign-device-id', localStorge.getItem('id'), data);
+  console.log('test event')
 })
 
 io.on('called', d => {
   console.log('Connected', d);
-  spawn('open', ['.'])
+  spawn('explorer.exe', ['.'])
 })
 
 // In this file you can include the rest of your app's specific main process
