@@ -1,123 +1,126 @@
 // Modules to control application life and create native browser window
-const {app, BrowserWindow, Tray, Menu} = require('electron')
-const ipc = require('electron').ipcMain;
+const { app, BrowserWindow, Tray, Menu } = require("electron");
+const ipc = require("electron").ipcMain;
 
-const path = require('path')
-const ip = require('ip');
-const os = require('os');
-const socket = require('socket.io-client')
-const spawn = require('child_process').spawn;
-const axios = require('axios').default;
+const path = require("path");
+const ip = require("ip");
+const os = require("os");
+const socket = require("socket.io-client");
+const spawn = require("child_process").spawn;
+const axios = require("axios").default;
 
-const Storge = require('./helpers/storage');
+const Storge = require("./helpers/storage");
 const localStorge = new Storge();
 
-const token = localStorge.getItem('token')
+const token = localStorge.getItem("token");
 
-const io = socket.connect('http://localhost:8090', {
-  transports: ['websocket', 'polling'],
+const io = socket.connect("http://localhost:8090", {
+  transports: ["websocket", "polling"],
   query: {
     token: token
   }
-})
+});
 
 
 
+const deviceData = {
+  deviceName: os.userInfo().username,
+  deviceType:
+    os.platform() === "darwin"
+      ? "Mac OS"
+      : os.platform() === "win32"
+      ? "Windows"
+      : "n/a",
+  connected: true,
+  lastActive: new Date().getTime()
+};
 
-
-const winIcon = path.resolve(__dirname, 'icon.ico');
-const macIcon = path.resolve(__dirname, 'icon.png');
-
+const winIcon = path.resolve(__dirname, "icon.ico");
+const macIcon = path.resolve(__dirname, "icon.png");
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the JavaScript object is garbage collected.
-let mainWindow
-let iconApp
-let userId
+let mainWindow;
+let iconApp;
+let userId;
+let userTempData;
 
-function createWindow () {
+function createWindow() {
   // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       nodeIntegration: true
     }
-  })
+  });
 
   // and load the index.html of the app.
-  mainWindow.loadFile('index.html')
+  mainWindow.loadFile("index.html");
 
   // Open the DevTools.
   // mainWindow.webContents.openDevTools()
-  mainWindow.webContents.send('test', {token: localStorge.getItem('token')})
-
+  mainWindow.webContents.send("test", { token: localStorge.getItem("token") });
 
   // Emitted when the window is closed.
-  mainWindow.on('closed', function () {
+  mainWindow.on("closed", function() {
     // Dereference the window object, usually you would store windows
     // in an array if your app supports multi windows, this is the time
     // when you should delete the corresponding element.
-    io.emit('device-status', localStorge.getItem('id'), false);
-    mainWindow = null
-  })
+    io.emit("sign-device-id", localStorge.getItem("id"), Object.assign(deviceData, {connected: false, lastActive: new Date().getTime()}));
+    mainWindow = null;
+  });
 }
+
+
 
 const cliced = () => {
-  mainWindow.hide()
-  console.log('cliced')
-}
+  mainWindow.hide();
+  console.log("cliced");
+};
 
 const showWind = () => {
-  mainWindow.show()
-}
-
+  mainWindow.show();
+};
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on('ready', () => {
-  iconApp = new Tray(os.platform() === 'darwin' ? macIcon : winIcon);
+app.on("ready", () => {
+  iconApp = new Tray(os.platform() === "darwin" ? macIcon : winIcon);
   const contextMenu = Menu.buildFromTemplate([
-    {label: 'Connect', type: 'normal', click: showWind},
-    {label: 'Close', type: 'normal', click: cliced},
-  ])
-  iconApp.setToolTip('Closy app')
-  iconApp.setContextMenu(contextMenu)
-  createWindow()
-})
+    { label: "Connect", type: "normal", click: showWind },
+    { label: "Close", type: "normal", click: cliced }
+  ]);
+  iconApp.setToolTip("Closy app");
+  iconApp.setContextMenu(contextMenu);
+  createWindow();
+});
 
 // Quit when all windows are closed.
-app.on('window-all-closed', function () {
+app.on("window-all-closed", function() {
   // On macOS it is common for applications and their menu bar
   // to stay active until the user quits explicitly with Cmd + Q
-  if (process.platform !== 'darwin') app.quit()
-})
+  if (process.platform !== "darwin") app.quit();
+});
 
-app.on('activate', function () {
+app.on("activate", function() {
   // On macOS it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
-  if (mainWindow === null) createWindow()
-})
+  if (mainWindow === null) createWindow();
+});
 
 
-const data = {
-  deviceName: os.userInfo().username,
-  deviceType: os.platform() === 'darwin' ? 'Mac OS' : os.platform() === 'win32' ? 'Windows' : 'n/a',
-  connected: io.connected ? true : false
-}
 
-let userData;
-
-
-if(io.connected) {
-  io.emit('sign-device-id', localStorge.setItem('id'), data);
+if(localStorge.getItem('id') !== '') {
+  io.emit("sign-device-id", localStorge.getItem("id"), deviceData);
 }
 
 
-ipc.on('load', (event) => {
 
+
+ipc.on("load", event => {
   // axios({
   //   method: 'get',
   //   url: 'http://localhost:8090/users/user',
@@ -128,51 +131,83 @@ ipc.on('load', (event) => {
   // }).catch((e) => {
   //   console.log(e);
   // })
-})
+});
 
+console.log('Temp user data:', userTempData)
 
+// get device and user info from ther server
 const loadD = () => {
   axios({
-    method: 'get',
-    url: 'http://localhost:8090/users/user',
-    headers: {'auth': localStorge.getItem('token')}
-  }).then((res) => {
-    userData = res.data;
-    localStorge.setItem('id', res.data.id)
-  }).catch((e) => {
-    console.log(e);
+    method: "get",
+    url: "http://localhost:8090/users/user",
+    headers: { auth: localStorge.getItem("token") }
   })
+    .then(res => {
+      userTempData = res.data;
+      localStorge.setItem("id", res.data.id);
+    })
+    .catch(e => {
+      console.log(e);
+    });
+};
+
+// login to server and assign token
+ipc.on("login", event => {
+  console.log("login");
+  axios({
+    method: "post",
+    url: "http://localhost:8090/users/login",
+    headers: { "Content-Type": "application/json" },
+    data: {
+      email: "email",
+      password: "password"
+    }
+  })
+    .then(res => {
+      console.log('Connected-from-login', io.connected)
+      localStorge.setMulti({ token: res.data.token, id: "" });
+    })
+    .catch(e => {
+      console.log(e);
+    })
+    .finally(() => {
+      loadD();
+    });
+});
+
+// check if socket connected
+if (io.connected) {
+  console.log('Socket Connected')
+  // io.emit("sign-device-id", localStorge.setItem("id"), deviceData);
 }
 
+ipc.on("test", event => {
+  console.log("test event");
+  console.log('Connected-from-test', io.connected)
+  io.emit("sign-device-id", localStorge.getItem("id"), deviceData);
+});
 
-ipc.on('login', event => {
-  console.log('login')
-  axios({
-    method: 'post',
-    url: 'http://localhost:8090/users/login',
-    headers: {'Content-Type': 'application/json'},
-    data: {
-      email: 'email',
-      password: 'pass'
-    }
-  }).then((res) => {
-    localStorge.setMulti({token: res.data.token, id: ''});
-  }).catch((e) => {
-    console.log(e);
-  }).finally(() => {
-    loadD();
-  })
-})
 
-ipc.on('test', event => {
-  io.emit('sign-device-id', localStorge.getItem('id'), data);
-  console.log('test event')
-})
+const commands = {
+  lockScreen: os.platform() === 'darwin' ? { cmd: 'pmset', args: ['displaysleepnow'] } : {cmd: 'rundll32.exe', args: ['user32.dll,LockWorkStation']},
+  open: os.platform() === 'darwin' ? { cmd: 'open', args: ['http://google.com'] } : {cmd: 'chrome', args: ['http://www.google.com']},
+  camera: os.platform() === 'darwin' ? {cmd: 'echo', args: ['no']} : {cmd: 'start', args: ['microsoft.windows.camera:']},
+}
 
-io.on('called', d => {
-  console.log('Connected', d);
-  spawn('explorer.exe', ['.'])
-})
+io.on("called", d => {
+  console.log('called', d)
+  switch(d) {
+    case 'lock':
+      return spawn(commands.lockScreen.cmd, commands.lockScreen.args);
+    case 'open':
+      return spawn(commands.open.cmd, commands.open.args);
+    case 'camera':
+      return spawn(commands.camera.cmd, commands.camera.args);
+    default:
+      return null;
+
+  }
+});
 
 // In this file you can include the rest of your app's specific main process
 // code. You can also put them in separate files and require them here.
