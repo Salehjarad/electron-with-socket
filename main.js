@@ -14,13 +14,16 @@ const localStorge = new Storge();
 
 const token = localStorge.getItem("token");
 
-const io = socket.connect("http://localhost:8090", {
+const io = socket.connect("http://192.168.1.3:8090", {
   transports: ["websocket", "polling"],
   query: {
     token: token
   }
 });
 
+
+// todo
+// fix status for windows and fix sign-device-id event
 
 
 const deviceData = {
@@ -68,6 +71,7 @@ function createWindow() {
     // Dereference the window object, usually you would store windows
     // in an array if your app supports multi windows, this is the time
     // when you should delete the corresponding element.
+    console.log('closed')
     io.emit("sign-device-id", localStorge.getItem("id"), Object.assign(deviceData, {connected: false, lastActive: new Date().getTime()}));
     mainWindow = null;
   });
@@ -95,27 +99,45 @@ app.on("ready", () => {
   ]);
   iconApp.setToolTip("Closy app");
   iconApp.setContextMenu(contextMenu);
+  io.emit("sign-device-id", localStorge.getItem("id"), Object.assign(deviceData, {connected: true, lastActive: new Date().getTime()}));
+
+  if(localStorge.getItem('id') !== '') {
+  }
   createWindow();
+  console.log('ready')
 });
 
 // Quit when all windows are closed.
 app.on("window-all-closed", function() {
   // On macOS it is common for applications and their menu bar
   // to stay active until the user quits explicitly with Cmd + Q
-  if (process.platform !== "darwin") app.quit();
+  console.log('window-all-closed')
+  if (process.platform !== "darwin") {
+    io.emit("sign-device-id", localStorge.getItem("id"), Object.assign(deviceData, {connected: false, lastActive: new Date().getTime()}));
+    app.quit();
+  }
 });
 
 app.on("activate", function() {
   // On macOS it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
-  if (mainWindow === null) createWindow();
+  io.emit("sign-device-id", localStorge.getItem("id"), Object.assign(deviceData, {connected: true, lastActive: new Date().getTime()}));
+
+  if(localStorge.getItem('id') !== '') {
+  }
+  if (mainWindow === null) {
+    console.log('activate')
+    io.emit("sign-device-id", localStorge.getItem("id"), Object.assign(deviceData, {connected: true, lastActive: new Date().getTime()}));
+
+    if(localStorge.getItem('id') !== '') {
+    }
+    createWindow()
+  };
 });
 
 
 
-if(localStorge.getItem('id') !== '') {
-  io.emit("sign-device-id", localStorge.getItem("id"), deviceData);
-}
+
 
 
 
@@ -139,7 +161,7 @@ console.log('Temp user data:', userTempData)
 const loadD = () => {
   axios({
     method: "get",
-    url: "http://localhost:8090/users/user",
+    url: "http://192.168.1.3:8090/users/user",
     headers: { auth: localStorge.getItem("token") }
   })
     .then(res => {
@@ -156,11 +178,11 @@ ipc.on("login", event => {
   console.log("login");
   axios({
     method: "post",
-    url: "http://localhost:8090/users/login",
+    url: "http://192.168.1.3:8090/users/login",
     headers: { "Content-Type": "application/json" },
     data: {
       email: "email",
-      password: "password"
+      password: "pass"
     }
   })
     .then(res => {
@@ -190,8 +212,8 @@ ipc.on("test", event => {
 
 const commands = {
   lockScreen: os.platform() === 'darwin' ? { cmd: 'pmset', args: ['displaysleepnow'] } : {cmd: 'rundll32.exe', args: ['user32.dll,LockWorkStation']},
-  open: os.platform() === 'darwin' ? { cmd: 'open', args: ['http://google.com'] } : {cmd: 'chrome', args: ['http://www.google.com']},
-  camera: os.platform() === 'darwin' ? {cmd: 'echo', args: ['no']} : {cmd: 'start', args: ['microsoft.windows.camera:']},
+  open: os.platform() === 'darwin' ? { cmd: 'open', args: [''] } : {cmd: 'chrome', args: ['']},
+  camera: os.platform() === 'darwin' ? {cmd: '', args: ['']} : {cmd: 'start', args: ['microsoft.windows.camera:']},
 }
 
 io.on("called", d => {
